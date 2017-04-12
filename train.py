@@ -186,8 +186,8 @@ def train_model(training_data=None,
     # ###############
     # Optimizers
     # ###############
-    optim_d = Adagrad()  # RMSprop(lr=lr_discriminator)
-    optim_g = Adagrad()  # RMSprop(lr=lr_generator)
+    optim_d = RMSprop(lr=lr_discriminator)
+    optim_g = RMSprop(lr=lr_generator)
 
     # ##############
     # Train
@@ -243,69 +243,58 @@ def train_model(training_data=None,
                 d_model = clip_weights(d_model, d_weight_constraint)
 
                 # Create a batch to feed the discriminator model
-                select = range((batch_counter - 1) * batch_size ,
-                               batch_counter * batch_size)
-                X_locations_real = \
-                    training_data['geometry']['n'+str(n_nodes)][select, :, :]
-                X_locations_real = np.reshape(X_locations_real, [batch_size,
-                                                                 (n_nodes - 1),
-                                                                 3])
-                X_parent_cut = \
-                    np.reshape(training_data['morphology']['n'+str(n_nodes)][select, :],
-                               [1, (n_nodes - 1) * batch_size])
-                X_parent_real = \
-                    batch_utils.get_batch(X_parent_cut=X_parent_cut,
-                                          batch_size=batch_size,
-                                          n_nodes=n_nodes)
+                # Sample a real batch
+                X_locations_real, X_parent_real = \
+                    next(batch_utils.get_batch(training_data,
+                                               batch_size,
+                                               n_nodes))
 
                 if train_loss == 'wasserstein_loss':
                     y_real = -np.ones((X_locations_real.shape[0], 1, 1))
                 else:
                     y_real = np.ones((X_locations_real.shape[0], 1, 1))
+                    # y_real -= \
+                    #     0.3 * np.random.rand(X_locations_real.shape[0], 1, 1)
 
                 X_locations_gen, X_parent_gen = \
                     batch_utils.gen_batch(batch_size=batch_size,
-                                           n_nodes=n_nodes,
-                                           input_dim=input_dim,
-                                           geom_model=g_model,
-                                           morph_model=m_model,
-                                           conditioning_rule=rule)
+                                          n_nodes=n_nodes,
+                                          input_dim=input_dim,
+                                          geom_model=g_model,
+                                          morph_model=m_model,
+                                          conditioning_rule=rule)
 
                 if train_loss == 'wasserstein_loss':
                     y_gen = np.ones((X_locations_gen.shape[0], 1, 1))
                 else:
                     y_gen = np.zeros((X_locations_gen.shape[0], 1, 1))
-                # make data in half of real and generated
-                cutting = int(batch_size/2)
-                X_locations_real_first_half = np.append(X_locations_real[:cutting,:,:],
-                                                        X_locations_gen[:cutting,:,:],
-                                                        axis=0)
-                X_parent_real_first_half = np.append(X_parent_real[:cutting,:,:],
-                                                     X_parent_gen[:cutting,:,:],
-                                                     axis=0)
-                y_real_first_half = np.append(y_real[:cutting,:,:],
-                                              y_gen[:cutting,:,:],
-                                              axis=0)
+                    # y_gen += \
+                    #     0.3 * np.random.rand(X_locations_gen.shape[0], 1, 1)
 
-                X_locations_real_second_half = np.append(X_locations_real[cutting:,:,:],
-                                                         X_locations_gen[cutting:,:,:],
-                                                         axis=0)
-                X_parent_real_second_half = np.append(X_parent_real[cutting:,:,:],
-                                                      X_parent_real[cutting:,:,:],
-                                                      axis=0)
-                y_real_second_half = np.append(y_real[cutting:,:,:],
-                                               y_gen[cutting:,:,:],
-                                               axis=0)
+                # make data in half of real and generated
+                X_locations_first_half, \
+                    X_parent_first_half, \
+                    y_first_half, \
+                    X_locations_second_half, \
+                    X_parent_second_half, \
+                    y_second_half = \
+                    batch_utils.split_batch(X_locations_real,
+                                            X_parent_real,
+                                            y_real,
+                                            X_locations_gen,
+                                            X_parent_gen,
+                                            y_gen,
+                                            batch_size)
                 # Update the discriminator
                 disc_loss = \
-                    d_model.train_on_batch([X_locations_real_first_half,
-                                            X_parent_real_first_half],
-                                            y_real_first_half)
+                    d_model.train_on_batch([X_locations_first_half,
+                                            X_parent_first_half],
+                                           y_first_half)
                 list_d_loss.append(disc_loss)
                 disc_loss = \
-                    d_model.train_on_batch([X_locations_real_second_half,
-                                            X_parent_real_second_half],
-                                            y_real_second_half)
+                    d_model.train_on_batch([X_locations_second_half,
+                                            X_parent_second_half],
+                                           y_second_half)
                 list_d_loss.append(disc_loss)
 
             if verbose:
@@ -319,7 +308,7 @@ def train_model(training_data=None,
             # Freeze the discriminator
             d_model.trainable = False
 
-            noise_input = np.random.rand(batch_size, 1, input_dim)
+            noise_input = np.random.randn(batch_size, 1, input_dim)
 
             gen_loss = \
                 stacked_model.train_on_batch([noise_input],
@@ -373,7 +362,7 @@ def train_model(training_data=None,
                                        e,
                                        batch_counter,
                                        list_d_loss,
-                                       model_path_root='../model_weights')
+                                       model_path_root='../../model_weights')
 
             #  Save models
             geom_model = g_model
