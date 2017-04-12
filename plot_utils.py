@@ -52,7 +52,7 @@ def plot_example_neuron_from_parent(X_locations, X_parent):
     return neuron_object
 
 
-def plot_adjacency(X_parent_real, X_parent_gen):
+def plot_adjacency(X_parent_real, X_parent_autoenc, X_parent_gen):
     """
     Plot a pair of adjacency matrices side by side.
 
@@ -60,14 +60,21 @@ def plot_adjacency(X_parent_real, X_parent_gen):
     """
     for sample in range(X_parent_real.shape[0]):
         plt.figure(figsize=(10, 5))
-        plt.subplot(1, 2, 1)
+        plt.subplot(1, 3, 1)
         plt.imshow(X_parent_real[sample, :, :],
                    interpolation='none',
                    cmap='Greys')
-        plt.subplot(1, 2, 2)
+        plt.title('Real')
+        plt.subplot(1, 3, 2)
+        plt.imshow(X_parent_autoenc[sample, :, :],
+                   interpolation='none',
+                   cmap='Greys')
+        plt.title('Autoencoded')
+        plt.subplot(1, 3, 3)
         plt.imshow(X_parent_gen[sample, :, :],
                    interpolation='none',
                    cmap='Greys')
+        plt.title('Generated')
 
 
 def plot_loss_trace(loss):
