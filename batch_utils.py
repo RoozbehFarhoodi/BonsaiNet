@@ -95,9 +95,10 @@ def features(X_parent, X_locations):
     return X_features
 
 
-def get_batch(X_parent_cut, batch_size, n_nodes):
+def get_batch(training_data, batch_size, n_nodes):
     """
     Make a batch of morphological and geometrical data.
+
     Parameters
     -----------
     training_data: dict of dicts
@@ -114,12 +115,9 @@ def get_batch(X_parent_cut, batch_size, n_nodes):
                 20-node downsampled neurons.
     batch_size: int
          batch size.
-     batch_counter: the index of the selected batches
-         the data for batch are selected from the index
-         (batch_counter - 1) * batch_size to
-         batch_counter * batch_size of whole data.
-     n_nodes: int
+    n_nodes: int
          subsampled resolution of the neurons.
+
     Returns
     -------
     X_locations_real: an array of size (batch_size x n_nodes - 1 x 3)
@@ -127,11 +125,24 @@ def get_batch(X_parent_cut, batch_size, n_nodes):
     X_parent_real: an array of size (batch_size x n_nodes x n_nodes - 1)
         the parent sequence for parent of the neuron.
     """
-    enc = OneHotEncoder(n_values=n_nodes)
+    while True:
+        select = \
+            np.random.choice(training_data['geometry']['n'+str(n_nodes)].shape[0],
+                             batch_size, replace=False)
 
-    X_parent_real = np.reshape(enc.fit_transform(X_parent_cut).toarray(),
-                               [batch_size, n_nodes - 1, n_nodes])
-    return X_parent_real
+        X_locations_real = \
+            training_data['geometry']['n'+str(n_nodes)][select, :, :]
+        X_locations_real = np.reshape(X_locations_real, [batch_size,
+                                                         (n_nodes - 1),
+                                                         3])
+        X_parent_cut = \
+            np.reshape(training_data['morphology']['n'+str(n_nodes)][select, :],
+                       [1, (n_nodes - 1) * batch_size])
+        enc = OneHotEncoder(n_values=n_nodes)
+        X_parent_real = np.reshape(enc.fit_transform(X_parent_cut).toarray(),
+                                   [batch_size, n_nodes - 1, n_nodes])
+
+        yield X_locations_real, X_parent_real
 
 
 def gen_batch(geom_model,
@@ -167,21 +178,59 @@ def gen_batch(geom_model,
     locations = None
     parent = None
 
-
     # Generate noise code
-    noise_code = np.random.rand(batch_size, 1, input_dim)
+    noise_code = np.random.randn(batch_size, 1, input_dim)
 
     # Generate geometry and morphology
     if conditioning_rule == 'mgd':
         parent = morph_model.predict(noise_code)
         locations = cond_geom_model.predict([noise_code,
-                                                parent])
+                                             parent])
     elif conditioning_rule == 'gmd':
         locations = geom_model.predict(noise_code)
         parent = cond_morph_model.predict([noise_code,
-                                              locations])
+                                           locations])
     elif conditioning_rule == 'none':
         locations = geom_model.predict(noise_code)
         parent = morph_model.predict(noise_code)
 
     return locations, parent
+
+
+def split_batch(X_locations_real,
+                X_parent_real,
+                y_real,
+                X_locations_gen,
+                X_parent_gen,
+                y_gen,
+                batch_size):
+    """ Split batch into two equal stratified halves."""
+    cutting = int(batch_size/2)
+    X_locations_first_half = \
+        np.append(X_locations_real[:cutting, :, :],
+                  X_locations_gen[:cutting, :, :],
+                  axis=0)
+    X_parent_first_half = \
+        np.append(X_parent_real[:cutting, :, :],
+                  X_parent_gen[:cutting, :, :],
+                  axis=0)
+    y_first_half = np.append(y_real[:cutting, :, :],
+                             y_gen[:cutting, :, :],
+                             axis=0)
+
+    X_locations_second_half = np.append(X_locations_real[cutting:, :, :],
+                                        X_locations_gen[cutting:, :, :],
+                                        axis=0)
+    X_parent_second_half = np.append(X_parent_real[cutting:, :, :],
+                                     X_parent_real[cutting:, :, :],
+                                     axis=0)
+    y_second_half = np.append(y_real[cutting:, :, :],
+                              y_gen[cutting:, :, :],
+                              axis=0)
+
+    return X_locations_first_half, \
+        X_parent_first_half, \
+        y_first_half, \
+        X_locations_second_half, \
+        X_parent_second_half, \
+        y_second_half
