@@ -7,7 +7,9 @@ from keras.models import Model
 from keras.layers.wrappers import TimeDistributed
 from keras.layers.recurrent import LSTM
 from keras.layers.normalization import BatchNormalization
+from keras.layers.noise import GaussianNoise
 from keras.regularizers import l2
+
 from keras import backend as K
 
 # Local imports
@@ -52,11 +54,17 @@ def generator(n_nodes=20,
 
     # Dense
     #geometry_hidden_dim = (n_nodes - 1) * 20
-    geometry_hidden1 = Dense(100)(noise_input)
-    geometry_hidden2 = Dense(100)(geometry_hidden1)
-    geometry_hidden3 = Dense(50)(geometry_hidden2)
+    geometry_hidden1 = Dense(100,
+                             activation='softsign')(noise_input)
+    geometry_hidden1 = GaussianNoise(0.05)(geometry_hidden1)
+    geometry_hidden2 = Dense(100,
+                             activation='softsign')(geometry_hidden1)
+    geometry_hidden2 = GaussianNoise(0.05)(geometry_hidden2)
+    geometry_hidden3 = Dense(50,
+                             activation='softsign')(geometry_hidden2)
+    geometry_hidden3 = GaussianNoise(0.05)(geometry_hidden3)
     geometry_hidden4 = Dense(3 * (n_nodes - 1))(geometry_hidden3)
-    #geometry_hidden3 = BatchNormalization()(geometry_hidden2)
+    geometry_hidden4 = GaussianNoise(0.05)(geometry_hidden4)
 
     # Reshape
     geometry_reshaped = \
@@ -75,11 +83,16 @@ def generator(n_nodes=20,
 
     # Dense
     #morphology_hidden_dim = n_nodes * 5
-    morphology_hidden1 = Dense(100)(noise_input)
-    morphology_hidden2 = Dense(100)(morphology_hidden1)
+    morphology_hidden1 = Dense(100,
+                               activation='softsign')(noise_input)
+    morphology_hidden1 = GaussianNoise(0.05)(morphology_hidden1)
+    morphology_hidden2 = Dense(100,
+                               activation='softsign')(morphology_hidden1)
+    morphology_hidden2 = GaussianNoise(0.05)(morphology_hidden2)
     # morphology_hidden2 = BatchNormalization()(morphology_hidden2)
     morphology_hidden3 = Dense(n_nodes * (n_nodes - 1),
                                activation='linear')(morphology_hidden2)
+    morphology_hidden3 = GaussianNoise(0.05)(morphology_hidden3)
 
     # Reshape
     morphology_reshaped = \
@@ -111,6 +124,7 @@ def discriminator(n_nodes=20,
                   train_loss='wasserstein_loss'):
     """
     Discriminator network.
+
     Parameters
     ----------
     n_nodes: int
@@ -150,9 +164,12 @@ def discriminator(n_nodes=20,
     # -------------------=
     discriminator_hidden1 = Dense(200)(embedding)
     # discriminator_hidden1 = Dropout(0.1)(discriminator_hidden1)
+    # discriminator_hidden1 = BatchNormalization(mode=1)(discriminator_hidden1)
     discriminator_hidden2 = Dense(50)(discriminator_hidden1)
+    # discriminator_hidden2 = BatchNormalization(mode=1)(discriminator_hidden2)
     # discriminator_hidden2 = Dropout(0.1)(discriminator_hidden2)
     discriminator_hidden3 = Dense(10)(discriminator_hidden2)
+    # discriminator_hidden3 = BatchNormalization(mode=1)(discriminator_hidden3)
     # discriminator_hidden3 = Dropout(0.1)(discriminator_hidden3)
 
     if train_loss == 'wasserstein_loss':
