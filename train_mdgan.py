@@ -492,7 +492,7 @@ def train_model(training_data=None,
                                        batch=batch_counter,
                                        list_md_loss=list_md_loss,
                                        list_dd_loss=list_dd_loss,
-                                       model_path_root='../../model_weights')
+                                       model_path_root='../model_weights')
 
             #  Save models
             geom_model = g_model

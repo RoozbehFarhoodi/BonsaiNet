@@ -152,8 +152,15 @@ def train_model(training_data=None,
     gan_model: list of keras model objects
         discriminators stacked on generators
     """
+
+    # ###############
+    # Optimizers
+    # ###############
+    optim_d = RMSprop(lr=lr_discriminator)
+    optim_g = RMSprop(lr=lr_generator)
+
     # ###################################
-    # Initialize models
+    # Initialize and compile models
     # ###################################
     geom_model = list()
     morph_model = list()
@@ -164,51 +171,6 @@ def train_model(training_data=None,
     d_model = models.discriminator(n_nodes=n_nodes,
                                    batch_size=batch_size,
                                    train_loss=train_loss)
-    # Generators and GANs
-    g_model, m_model = \
-        models.generator(n_nodes=n_nodes,
-                         batch_size=batch_size)
-    stacked_model = \
-        models.discriminator_on_generators(g_model,
-                                           m_model,
-                                           d_model,
-                                           conditioning_rule=rule,
-                                           input_dim=input_dim,
-                                           n_nodes=n_nodes)
-
-
-    # Collect all models into a list
-    disc_model.append(d_model)
-    geom_model.append(g_model)
-    morph_model.append(m_model)
-    gan_model.append(stacked_model)
-
-    # ###############
-    # Optimizers
-    # ###############
-    optim_d = RMSprop(lr=lr_discriminator)
-    optim_g = RMSprop(lr=lr_generator)
-
-    # ##############
-    # Train
-    # ##############
-    # ---------------
-    # Compile models
-    # ---------------
-
-    g_model.compile(loss='mse', optimizer=optim_g)
-    m_model.compile(loss='mse', optimizer=optim_g)
-
-    d_model.trainable = False
-    if train_loss == 'wasserstein_loss':
-        stacked_model.compile(loss=models.wasserstein_loss,
-                              optimizer=optim_g)
-    else:
-        stacked_model.compile(loss='binary_crossentropy',
-                              optimizer=optim_g)
-
-    d_model.trainable = True
-
     if train_loss == 'wasserstein_loss':
         d_model.compile(loss=models.wasserstein_loss,
                         optimizer=optim_d)
@@ -216,6 +178,38 @@ def train_model(training_data=None,
         d_model.compile(loss='binary_crossentropy',
                         optimizer=optim_d)
 
+    # Generators and GANs
+    g_model, m_model = \
+        models.generator(n_nodes=n_nodes,
+                         batch_size=batch_size)
+    g_model.compile(loss='mse', optimizer=optim_g)
+    m_model.compile(loss='mse', optimizer=optim_g)
+
+    d_model.trainable = False
+    stacked_model = \
+        models.discriminator_on_generators(g_model,
+                                           m_model,
+                                           d_model,
+                                           conditioning_rule=rule,
+                                           input_dim=input_dim,
+                                           n_nodes=n_nodes)
+    if train_loss == 'wasserstein_loss':
+        stacked_model.compile(loss=models.wasserstein_loss,
+                              optimizer=optim_g)
+    else:
+        stacked_model.compile(loss='binary_crossentropy',
+                              optimizer=optim_g)
+    d_model.trainable = True
+
+    # Collect all models into a list
+    disc_model.append(d_model)
+    geom_model.append(g_model)
+    morph_model.append(m_model)
+    gan_model.append(stacked_model)
+
+    # ##############
+    # Train
+    # ##############
     if verbose:
         print("")
         print(20*"=")
@@ -305,9 +299,6 @@ def train_model(training_data=None,
             # -------------------------------------
             # Step 2: Train generators alternately
             # -------------------------------------
-            # Freeze the discriminator
-            d_model.trainable = False
-
             noise_input = np.random.randn(batch_size, 1, input_dim)
 
             gen_loss = \
@@ -322,10 +313,6 @@ def train_model(training_data=None,
                 print("")
                 print("    Generator_Loss: {0}".format(gen_loss))
 
-
-            # Unfreeze the discriminator
-            d_model.trainable = True
-
             # ---------------------
             # Step 3: Housekeeping
             # ---------------------
@@ -335,11 +322,14 @@ def train_model(training_data=None,
             # Save model weights (few times per epoch)
             print(batch_counter)
             if batch_counter % 2 == 0:
-                #m_model = clip_weights(m_model, m_weight_constraint)
-                #g_model = clip_weights(g_model, g_weight_constraint)
                 if verbose:
                     print ("     Level #{0} Epoch #{1} Batch #{2}".
                            format(1, e, batch_counter))
+
+                    neuron_object = \
+                        plot_utils.plot_example_neuron_from_parent(
+                            X_locations_real[0, :, :],
+                            X_parent_real[0, :, :])
 
                     neuron_object = \
                         plot_utils.plot_example_neuron_from_parent(
@@ -347,11 +337,12 @@ def train_model(training_data=None,
                             X_parent_gen[0, :, :])
                     plt.plot(np.squeeze(X_locations_gen[0, :, :]))
 
-                    plot_utils.plot_adjacency(X_parent_real[0:2,:,:],
-                                              X_parent_gen[0:2,:,:])
+                    plot_utils.plot_adjacency(X_parent_real[0:2, :, :],
+                                              X_parent_real[0:2, :, :],
+                                              X_parent_gen[0:2, :, :])
 
             # Display loss trace
-            #if verbose:
+            # if verbose:
                     plot_utils.plot_loss_trace(list_d_loss)
 
                     # save the models
@@ -362,7 +353,7 @@ def train_model(training_data=None,
                                        e,
                                        batch_counter,
                                        list_d_loss,
-                                       model_path_root='../../model_weights')
+                                       model_path_root='../model_weights')
 
             #  Save models
             geom_model = g_model
